@@ -184,19 +184,16 @@ async function migrateFixMissingDocSyncInfo (client: MigrationClient): Promise<v
         if (docs === null || docs.length === 0) {
           break
         }
-        const infos = await client.find(
-          DOMAIN_GITHUB,
-          {
-            _class: github.class.DocSyncInfo,
-            _id: { $in: docs.map((it) => it._id as unknown as Ref<DocSyncInfo>) }
-          },
-          {
-            projection: {
-              _id: 1
-            }
-          }
-        )
-        const infoIds = toIdMap(infos)
+        const query = {
+          _class: github.class.DocSyncInfo,
+          _id: { $in: docs.map((it) => it._id as unknown as Ref<DocSyncInfo>) }
+        }
+        // Some deployments already store sync records in the target domain.
+        const [legacyInfos, currentInfos] = await Promise.all([
+          client.find(DOMAIN_GITHUB, query, { projection: { _id: 1 } }),
+          client.find(DOMAIN_GITHUB_SYNC, query, { projection: { _id: 1 } })
+        ])
+        const infoIds = toIdMap([...legacyInfos, ...currentInfos])
         let repository: Ref<GithubIntegrationRepository> | null = null
         for (const issue of docs) {
           if (!infoIds.has(issue._id)) {
